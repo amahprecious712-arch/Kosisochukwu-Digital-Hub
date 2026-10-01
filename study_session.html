@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Study Session - Knowledge Delivery Hub{% endblock %}
+{% block content %}
+<section class="max-w-6xl mx-auto px-6 py-12">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-stone-200 dark:border-zinc-800 pb-4">
+        <div>
+            <span class="bg-indigo-600 text-white text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider">KDH Study Space</span>
+            <h1 class="font-serif text-3xl text-stone-800 dark:text-zinc-100 mt-2">AI Study Session</h1>
+        </div>
+        <a href="{% url 'dashboard' %}" class="text-sm text-stone-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition">
+            &larr; Back to Dashboard
+        </a>
+    </div>
+    
+    <!-- Loading State Box -->
+    <div id="loading-box" class="p-8 border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl shadow-sm mb-6 text-center">
+        <div class="inline-block w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-stone-600 dark:text-zinc-300 text-sm font-medium">Generating your customized study guide and practice questions from your material...</p>
+    </div>
+
+    <!-- Main Workspace Grid (Hidden until loaded) -->
+    <div id="content-box" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left 2 Columns: Study Guide & Quiz Questions -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Study Guide Section -->
+            <div class="border border-stone-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-900 rounded-xl shadow-sm">
+                <h2 class="text-xl font-serif text-stone-800 dark:text-zinc-100 mb-4 pb-2 border-b border-stone-100 dark:border-zinc-800">Study Guide & Summary</h2>
+                <div id="study-guide-text" class="text-stone-700 dark:text-zinc-300 text-sm leading-relaxed whitespace-pre-line space-y-4"></div>
+            </div>
+
+            <!-- Practice Questions Section -->
+            <div class="border border-stone-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-900 rounded-xl shadow-sm">
+                <h2 class="text-xl font-serif text-stone-800 dark:text-zinc-100 mb-4 pb-2 border-b border-stone-100 dark:border-zinc-800">Practice Quiz</h2>
+                <div id="practice-questions-container" class="space-y-4">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Interactive AI Tutor Chat -->
+        <div class="border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-5 flex flex-col h-[75vh] sticky top-6">
+            <div class="pb-3 border-b border-stone-100 dark:border-zinc-800 flex items-center justify-between">
+                <h2 class="font-serif font-bold text-stone-800 dark:text-zinc-100 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                    AI Tutor Chat
+                </h2>
+                <span class="text-xs text-emerald-500 font-medium">Online</span>
+            </div>
+
+            <!-- Chat Log Messages -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto py-4 space-y-3 pr-1 text-sm">
+                <div class="bg-stone-50 dark:bg-zinc-800/60 rounded-xl p-3 text-stone-700 dark:text-zinc-300 border border-stone-100 dark:border-zinc-800">
+                    <p class="font-semibold text-indigo-600 dark:text-indigo-400 text-xs mb-1">KDH AI Assistant</p>
+                    Hello! Ask me any question or request help on any topic.
+                </div>
+            </div>
+
+            <!-- Chat Input Form -->
+            <form id="chat-form" class="pt-3 border-t border-stone-100 dark:border-zinc-800 flex gap-2">
+                {% csrf_token %}
+                <input type="text" id="chat-input" placeholder="Type your message to the AI..." required
+                    class="flex-1 bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-stone-800 dark:text-zinc-100 focus:outline-none focus:border-indigo-600">
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-xl transition text-sm shadow-sm">
+                    Send
+                </button>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+<script>
+    // Extract material_id safely (empty string if no material is loaded)
+    const materialId = "{{ material.id|default:'' }}";
+    
+    // Set appropriate API endpoints based on mode
+    const chatApiUrl = materialId ? `/api/university/study-session/${materialId}/ask/` : `/api/university/ask/`;
+    const studySessionUrl = materialId ? `/api/university/study-session/${materialId}/` : null;
+
+    if (!materialId) {
+        // GENERAL MODE: No file uploaded yet, open workspace immediately for chat testing
+        document.getElementById('loading-box').classList.add('hidden');
+        document.getElementById('content-box').classList.remove('hidden');
+        document.getElementById('study-guide-text').innerText = "You are currently in General AI Tutor Mode. Test the AI chat assistant freely on the right panel without needing a course material file!";
+        document.getElementById('practice-questions-container').innerHTML = `<p class="text-sm text-stone-500">Upload a study material from your dashboard later to generate automated study guides and practice quizzes.</p>`;
+    } else {
+        // STUDY MATERIAL MODE: Poll for generated content
+        async function checkSession() {
+            try {
+                let response = await fetch(studySessionUrl);
+                let data = await response.json();
+                
+                if (data.status === "COMPLETED") {
+                    document.getElementById('loading-box').classList.add('hidden');
+                    document.getElementById('content-box').classList.remove('hidden');
+                    
+                    document.getElementById('study-guide-text').innerText = data.study_guide;
+
+                    const questionsContainer = document.getElementById('practice-questions-container');
+                    if (data.generated_questions && data.generated_questions.length > 0) {
+                        let qHtml = "";
+                        data.generated_questions.forEach((q, idx) => {
+                            qHtml += `
+                                <div class="bg-stone-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-stone-200 dark:border-zinc-800">
+                                    <p class="font-medium text-stone-800 dark:text-zinc-200 mb-2">${idx + 1}. ${q.question}</p>
+                                    <ul class="space-y-1 text-xs text-stone-600 dark:text-zinc-400 pl-2">
+                                        ${q.options.map(opt => `<li>• ${opt}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            `;
+                        });
+                        questionsContainer.innerHTML = qHtml;
+                    } else {
+                        questionsContainer.innerHTML = `<p class="text-sm text-stone-500">No practice questions returned for this session.</p>`;
+                    }
+
+                    clearInterval(pollInterval);
+                } else if (data.status === "FAILED") {
+                    document.getElementById('loading-box').innerHTML = `<p class="text-rose-500 text-sm font-medium">Study generation failed. Please try re-uploading your document.</p>`;
+                    clearInterval(pollInterval);
+                }
+            } catch (e) {
+                console.error("Checking session...", e);
+            }
+        }
+
+        let pollInterval = setInterval(checkSession, 3000);
+    }
+
+    // Chat Assistant Form Handler
+    const chatForm = document.getElementById("chat-form");
+    const chatInput = document.getElementById("chat-input");
+    const chatMessages = document.getElementById("chat-messages");
+
+    chatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const question = chatInput.value.trim();
+        if (!question) return;
+
+        // Append user prompt bubble
+        chatMessages.innerHTML += `
+            <div class="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 rounded-xl p-3 text-stone-800 dark:text-zinc-100 ml-4">
+                <p class="font-semibold text-indigo-600 dark:text-indigo-400 text-xs mb-1">You</p>
+                ${escapeHtml(question)}
+            </div>
+        `;
+        chatInput.value = "";
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Append thinking placeholder bubble
+        const loadingId = "loading-" + Date.now();
+        chatMessages.innerHTML += `
+            <div id="${loadingId}" class="bg-stone-50 dark:bg-zinc-800/60 rounded-xl p-3 text-stone-500 dark:text-zinc-400 mr-4 animate-pulse border border-stone-100 dark:border-zinc-800">
+                <p class="font-semibold text-indigo-600 dark:text-indigo-400 text-xs mb-1">KDH AI Assistant</p>
+                Thinking through your question...
+            </div>
+        `;
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        try {
+            const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            const response = await fetch(chatApiUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+                body: JSON.stringify({ question: question })
+            });
+
+            const result = await response.json();
+            document.getElementById(loadingId).remove();
+
+            const answerText = result.answer || result.error || "No response received.";
+
+            // Append AI answer bubble
+            chatMessages.innerHTML += `
+                <div class="bg-stone-50 dark:bg-zinc-800/60 rounded-xl p-3 text-stone-700 dark:text-zinc-300 mr-4 border border-stone-100 dark:border-zinc-800">
+                    <p class="font-semibold text-indigo-600 dark:text-indigo-400 text-xs mb-1">KDH AI Assistant</p>
+                    ${escapeHtml(answerText).replace(/\n/g, '<br>')}
+                </div>
+            `;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        } catch (err) {
+            document.getElementById(loadingId).remove();
+            chatMessages.innerHTML += `
+                <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl p-3 text-rose-600 dark:text-rose-300 mr-4">
+                    <p class="font-semibold text-rose-500 text-xs mb-1">System Error</p>
+                    Could not reach the AI server. Check your network connection.
+                </div>
+            `;
+        }
+    });
+
+    function escapeHtml(text) {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+</script>
+{% endblock %}
