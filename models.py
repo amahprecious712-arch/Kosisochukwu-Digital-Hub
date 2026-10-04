@@ -55,7 +55,9 @@ class CustomUser(AbstractUser):
     The fix: explicitly redeclare both fields here with a UNIQUE
     related_name so there is no ambiguity.
     """
-
+    class Meta:
+        app_label = 'models'
+        
     # --- Redeclared to fix E304: unique related_name/related_query_name ---
     groups = models.ManyToManyField(
         "auth.Group",
