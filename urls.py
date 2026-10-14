@@ -1,5 +1,5 @@
 from django.urls import path
-import views
+import . import views
 from .payments import initialize_payment, paystack_webhook
 
 urlpatterns = [
