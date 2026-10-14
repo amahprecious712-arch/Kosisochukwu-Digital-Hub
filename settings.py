@@ -20,7 +20,7 @@ SDASH_API_TOKEN = config('SDASH_API_TOKEN', default='')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [ '.onrender.com', '127.0.0.1', 'localhost' ]
+ALLOWED_HOSTS = [ '.railway.app', '127.0.0.1', 'localhost' ]
 
 
 # Application definition
